@@ -1,20 +1,23 @@
 /**
  * Componente ProjectForm - Formulário para criar/editar projetos
  * Formulário completo com validações e regras de negócio
+ * Integrado com o backend Spring Boot
  */
 
 import React, { useState, useEffect } from 'react';
-import { Project, ProjectFormData } from '../../interfaces';
+import { Project, ProjectFormData, ProjectUpdateData } from '../../interfaces';
 import { useMembers } from '../../hooks/useMembers';
-import { useMemberValidation } from '../../hooks/useMembers';
 import { LoadingSpinner } from '../UI/LoadingSpinner';
 import { ErrorMessage } from '../UI/ErrorMessage';
-import { formatCurrency } from '../../utils';
+import { Autocomplete } from '../UI/Autocomplete';
+import { formatCurrency, validateMembersCount } from '../../utils';
 import toast from 'react-hot-toast';
+import { X } from 'lucide-react';
+import { Member } from '../../interfaces';
 
 interface ProjectFormProps {
   project?: Project;
-  onSubmit: (data: ProjectFormData) => Promise<boolean>;
+  onSubmit: (data: ProjectFormData | ProjectUpdateData) => Promise<boolean>;
   onCancel: () => void;
   loading?: boolean;
 }
@@ -29,22 +32,37 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({
   loading = false
 }) => {
   const { funcionarios, gerentes, loading: membersLoading } = useMembers();
-  const { validateProjectMembers } = useMemberValidation();
 
   // Estado do formulário
   const [formData, setFormData] = useState<ProjectFormData>({
     nome: project?.nome || '',
     dataInicio: project?.dataInicio || '',
     previsaoTermino: project?.previsaoTermino || '',
-    dataRealTermino: project?.dataRealTermino || '',
-    orcamento: project?.orcamento || 0,
+    orcamentoTotal: project?.orcamentoTotal || 0,
     descricao: project?.descricao || '',
-    gerenteId: project?.gerenteId || '',
-    membrosIds: project?.membrosIds || []
+    gerenteId: project?.gerente?.id || 0,
+    membros: project?.membros || [],
+    dataRealTermino: project?.dataRealTermino || ''
   });
+
+  // Estado para autocomplete
+  const [selectedGerente, setSelectedGerente] = useState<Member | null>(
+    project?.gerente || null
+  );
+  const [selectedMembros, setSelectedMembros] = useState<Member[]>([]);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Carrega membros selecionados quando o projeto é carregado
+  useEffect(() => {
+    if (project?.membros && funcionarios.length > 0) {
+      const membrosSelecionados = funcionarios.filter(member => 
+        project.membros.includes(member.id)
+      );
+      setSelectedMembros(membrosSelecionados);
+    }
+  }, [project, funcionarios]);
 
   /**
    * Atualiza campo do formulário
@@ -56,6 +74,53 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
+  };
+
+  /**
+   * Manipula seleção de gerente
+   */
+  const handleGerenteSelect = (gerente: Member | null) => {
+    setSelectedGerente(gerente);
+    updateField('gerenteId', gerente?.id || 0);
+    
+    if (errors.gerenteId) {
+      setErrors(prev => ({ ...prev, gerenteId: '' }));
+    }
+  };
+
+  /**
+   * Manipula seleção de membros
+   */
+  const handleMembroSelect = (membro: Member | null) => {
+    if (!membro) return;
+
+    const isAlreadySelected = selectedMembros.some(m => m.id === membro.id);
+    if (isAlreadySelected) {
+      toast.error('Este membro já foi selecionado');
+      return;
+    }
+
+    if (selectedMembros.length >= 10) {
+      toast.error('Máximo de 10 membros por projeto');
+      return;
+    }
+
+    const newMembros = [...selectedMembros, membro];
+    setSelectedMembros(newMembros);
+    updateField('membros', newMembros.map(m => m.id));
+    
+    if (errors.membros) {
+      setErrors(prev => ({ ...prev, membros: '' }));
+    }
+  };
+
+  /**
+   * Remove membro da seleção
+   */
+  const removeMembro = (membroId: number) => {
+    const newMembros = selectedMembros.filter(m => m.id !== membroId);
+    setSelectedMembros(newMembros);
+    updateField('membros', newMembros.map(m => m.id));
   };
 
   /**
@@ -77,15 +142,15 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({
       newErrors.previsaoTermino = 'Previsão de término é obrigatória';
     }
 
-    if (formData.orcamento <= 0) {
-      newErrors.orcamento = 'Orçamento deve ser maior que zero';
+    if (formData.orcamentoTotal <= 0) {
+      newErrors.orcamentoTotal = 'Orçamento deve ser maior que zero';
     }
 
     if (!formData.descricao.trim()) {
       newErrors.descricao = 'Descrição é obrigatória';
     }
 
-    if (!formData.gerenteId) {
+    if (!selectedGerente) {
       newErrors.gerenteId = 'Gerente é obrigatório';
     }
 
@@ -99,22 +164,9 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({
       }
     }
 
-    // Validação de data real de término
-    if (formData.dataRealTermino && formData.dataInicio) {
-      const inicio = new Date(formData.dataInicio);
-      const realTermino = new Date(formData.dataRealTermino);
-      
-      if (realTermino <= inicio) {
-        newErrors.dataRealTermino = 'Data real de término deve ser posterior à data de início';
-      }
-    }
-
     // Validação de membros
-    const memberValidation = validateProjectMembers(formData.membrosIds, formData.gerenteId);
-    if (!memberValidation.isValid) {
-      memberValidation.errors.forEach((error, index) => {
-        newErrors[`members_${index}`] = error;
-      });
+    if (selectedMembros.length === 0) {
+      newErrors.membros = 'Pelo menos um membro deve ser selecionado';
     }
 
     setErrors(newErrors);
@@ -122,7 +174,7 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({
   };
 
   /**
-   * Submete o formulário
+   * Manipula o envio do formulário
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,255 +187,240 @@ export const ProjectForm: React.FC<ProjectFormProps> = ({
     setIsSubmitting(true);
     
     try {
-      const success = await onSubmit(formData);
+      let success: boolean;
+      
+      if (project) {
+        // Edição: usa ProjectUpdateData (sem membros)
+        const updateData: ProjectUpdateData = {
+          nome: formData.nome,
+          dataInicio: formData.dataInicio,
+          previsaoTermino: formData.previsaoTermino,
+          orcamentoTotal: formData.orcamentoTotal,
+          descricao: formData.descricao,
+          gerenteId: formData.gerenteId,
+          dataRealTermino: formData.dataRealTermino || null
+        };
+        success = await onSubmit(updateData);
+      } else {
+        // Criação: usa ProjectFormData (com membros)
+        const createData: ProjectFormData = {
+          ...formData,
+          membros: selectedMembros.map(m => m.id)
+        };
+        success = await onSubmit(createData);
+      }
+      
       if (success) {
-        // Formulário será fechado pelo componente pai
+        // Formulário enviado com sucesso
+        setFormData({
+          nome: '',
+          dataInicio: '',
+          previsaoTermino: '',
+          orcamentoTotal: 0,
+          descricao: '',
+          gerenteId: 0,
+          membros: [],
+          dataRealTermino: ''
+        });
+        setSelectedGerente(null);
+        setSelectedMembros([]);
       }
     } catch (error) {
-      toast.error('Erro ao salvar projeto');
+      console.error('Erro ao enviar formulário:', error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  /**
-   * Toggle de seleção de membro
-   */
-  const toggleMember = (memberId: string) => {
-    const isSelected = formData.membrosIds.includes(memberId);
-    
-    if (isSelected) {
-      updateField('membrosIds', formData.membrosIds.filter(id => id !== memberId));
-    } else {
-      if (formData.membrosIds.length >= 10) {
-        toast.error('Máximo de 10 membros por projeto');
-        return;
-      }
-      updateField('membrosIds', [...formData.membrosIds, memberId]);
-    }
-  };
-
   if (membersLoading) {
-    return <LoadingSpinner text="Carregando formulário..." />;
+    return <LoadingSpinner />;
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Nome do projeto */}
+      {/* Nome do Projeto */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="nome" className="block text-sm font-medium text-gray-700 mb-2">
           Nome do Projeto *
         </label>
         <input
           type="text"
+          id="nome"
           value={formData.nome}
           onChange={(e) => updateField('nome', e.target.value)}
-          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-            errors.nome ? 'border-red-300' : 'border-gray-300'
+          className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            errors.nome ? 'border-red-500' : 'border-gray-300'
           }`}
           placeholder="Digite o nome do projeto"
         />
-        {errors.nome && <p className="text-red-600 text-sm mt-1">{errors.nome}</p>}
+        {errors.nome && <p className="mt-1 text-sm text-red-600">{errors.nome}</p>}
       </div>
 
       {/* Datas */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="dataInicio" className="block text-sm font-medium text-gray-700 mb-2">
             Data de Início *
           </label>
           <input
             type="date"
+            id="dataInicio"
             value={formData.dataInicio}
             onChange={(e) => updateField('dataInicio', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.dataInicio ? 'border-red-300' : 'border-gray-300'
+            className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              errors.dataInicio ? 'border-red-500' : 'border-gray-300'
             }`}
           />
-          {errors.dataInicio && <p className="text-red-600 text-sm mt-1">{errors.dataInicio}</p>}
+          {errors.dataInicio && <p className="mt-1 text-sm text-red-600">{errors.dataInicio}</p>}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="previsaoTermino" className="block text-sm font-medium text-gray-700 mb-2">
             Previsão de Término *
           </label>
           <input
             type="date"
+            id="previsaoTermino"
             value={formData.previsaoTermino}
             onChange={(e) => updateField('previsaoTermino', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.previsaoTermino ? 'border-red-300' : 'border-gray-300'
+            className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+              errors.previsaoTermino ? 'border-red-500' : 'border-gray-300'
             }`}
           />
-          {errors.previsaoTermino && <p className="text-red-600 text-sm mt-1">{errors.previsaoTermino}</p>}
+          {errors.previsaoTermino && <p className="mt-1 text-sm text-red-600">{errors.previsaoTermino}</p>}
         </div>
       </div>
 
-      {/* Data real de término (apenas para edição) */}
+      {/* Data Real de Término (apenas para edição) */}
       {project && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label htmlFor="dataRealTermino" className="block text-sm font-medium text-gray-700 mb-2">
             Data Real de Término
           </label>
           <input
             type="date"
-            value={formData.dataRealTermino}
+            id="dataRealTermino"
+            value={formData.dataRealTermino || ''}
             onChange={(e) => updateField('dataRealTermino', e.target.value)}
-            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.dataRealTermino ? 'border-red-300' : 'border-gray-300'
-            }`}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          {errors.dataRealTermino && <p className="text-red-600 text-sm mt-1">{errors.dataRealTermino}</p>}
+          <p className="mt-1 text-sm text-gray-500">
+            Deixe em branco se o projeto ainda não foi concluído
+          </p>
         </div>
       )}
 
       {/* Orçamento */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Orçamento *
+        <label htmlFor="orcamentoTotal" className="block text-sm font-medium text-gray-700 mb-2">
+          Orçamento Total (R$) *
         </label>
-        <div className="relative">
-          <span className="absolute left-3 top-2 text-gray-500">R$</span>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={formData.orcamento}
-            onChange={(e) => updateField('orcamento', parseFloat(e.target.value) || 0)}
-            className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-              errors.orcamento ? 'border-red-300' : 'border-gray-300'
-            }`}
-            placeholder="0,00"
-          />
-        </div>
-        {formData.orcamento > 0 && (
-          <p className="text-sm text-gray-600 mt-1">
-            {formatCurrency(formData.orcamento)}
-          </p>
-        )}
-        {errors.orcamento && <p className="text-red-600 text-sm mt-1">{errors.orcamento}</p>}
+        <input
+          type="number"
+          id="orcamentoTotal"
+          value={formData.orcamentoTotal}
+          onChange={(e) => updateField('orcamentoTotal', parseFloat(e.target.value) || 0)}
+          className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            errors.orcamentoTotal ? 'border-red-500' : 'border-gray-300'
+          }`}
+          placeholder="0,00"
+          min="0"
+          step="0.01"
+        />
+        {errors.orcamentoTotal && <p className="mt-1 text-sm text-red-600">{errors.orcamentoTotal}</p>}
       </div>
 
       {/* Descrição */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label htmlFor="descricao" className="block text-sm font-medium text-gray-700 mb-2">
           Descrição *
         </label>
         <textarea
+          id="descricao"
           value={formData.descricao}
           onChange={(e) => updateField('descricao', e.target.value)}
           rows={4}
-          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-            errors.descricao ? 'border-red-300' : 'border-gray-300'
+          className={`w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            errors.descricao ? 'border-red-500' : 'border-gray-300'
           }`}
           placeholder="Descreva o projeto..."
         />
-        {errors.descricao && <p className="text-red-600 text-sm mt-1">{errors.descricao}</p>}
+        {errors.descricao && <p className="mt-1 text-sm text-red-600">{errors.descricao}</p>}
       </div>
 
-      {/* Gerente */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Gerente *
-        </label>
-        <select
-          value={formData.gerenteId}
-          onChange={(e) => updateField('gerenteId', e.target.value)}
-          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-            errors.gerenteId ? 'border-red-300' : 'border-gray-300'
-          }`}
-        >
-          <option value="">Selecione um gerente</option>
-          {gerentes.map((gerente) => (
-            <option key={gerente.id} value={gerente.id}>
-              {gerente.nome}
-            </option>
-          ))}
-        </select>
-        {errors.gerenteId && <p className="text-red-600 text-sm mt-1">{errors.gerenteId}</p>}
-      </div>
+      {/* Seleção de Gerente */}
+      <Autocomplete
+        label="Gerente do Projeto *"
+        placeholder="Buscar gerente..."
+        value={selectedGerente}
+        onSelect={handleGerenteSelect}
+        options={gerentes}
+        loading={membersLoading}
+        error={errors.gerenteId}
+        required
+      />
 
-      {/* Membros */}
+      {/* Seleção de Membros */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Membros da Equipe * (1-10 membros)
+          Membros da Equipe *
         </label>
-        <div className="border border-gray-300 rounded-lg p-4 max-h-60 overflow-y-auto">
-          {funcionarios.length === 0 ? (
-            <p className="text-gray-500 text-sm">Nenhum funcionário disponível</p>
-          ) : (
-            <div className="space-y-2">
-              {funcionarios.map((funcionario) => {
-                const isSelected = formData.membrosIds.includes(funcionario.id);
-                const isOverloaded = funcionario.projetosAtivos >= 3;
-                
-                return (
-                  <label
-                    key={funcionario.id}
-                    className={`flex items-center space-x-3 p-2 rounded cursor-pointer transition-colors ${
-                      isSelected ? 'bg-blue-50 border border-blue-200' : 'hover:bg-gray-50'
-                    } ${isOverloaded && !isSelected ? 'opacity-50' : ''}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleMember(funcionario.id)}
-                      disabled={isOverloaded && !isSelected}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div className="flex items-center space-x-2 flex-1">
-                      {funcionario.avatar && (
-                        <img
-                          src={funcionario.avatar}
-                          alt={funcionario.nome}
-                          className="w-6 h-6 rounded-full object-cover"
-                        />
-                      )}
-                      <span className="text-sm font-medium">{funcionario.nome}</span>
-                      <span className="text-xs text-gray-500">
-                        ({funcionario.projetosAtivos}/3 projetos)
-                      </span>
-                      {isOverloaded && (
-                        <span className="text-xs text-red-600 font-medium">
-                          Capacidade máxima
-                        </span>
-                      )}
-                    </div>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        <p className="text-sm text-gray-600 mt-1">
-          {formData.membrosIds.length} de 10 membros selecionados
-        </p>
         
-        {/* Exibe erros de validação de membros */}
-        {Object.entries(errors)
-          .filter(([key]) => key.startsWith('members_'))
-          .map(([key, error]) => (
-            <p key={key} className="text-red-600 text-sm mt-1">{error}</p>
-          ))}
+        {/* Campo de busca de membros */}
+        <Autocomplete
+          label=""
+          placeholder="Buscar funcionário..."
+          value={null}
+          onSelect={handleMembroSelect}
+          options={funcionarios.filter(m => !selectedMembros.some(sm => sm.id === m.id))}
+          loading={membersLoading}
+          error={errors.membros}
+        />
+
+        {/* Lista de membros selecionados */}
+        {selectedMembros.length > 0 && (
+          <div className="mt-4">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">
+              Membros Selecionados ({selectedMembros.length}/10)
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {selectedMembros.map((membro) => (
+                <div key={membro.id} className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <div>
+                    <div className="font-medium text-green-800">{membro.nome}</div>
+                    <div className="text-sm text-green-600">{membro.cargo}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeMembro(membro.id)}
+                    className="p-1 text-green-600 hover:text-green-800 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
+        {errors.membros && <p className="mt-1 text-sm text-red-600">{errors.membros}</p>}
       </div>
 
-      {/* Botões */}
-      <div className="flex justify-end space-x-3 pt-6 border-t border-gray-200">
+      {/* Botões de Ação */}
+      <div className="flex justify-end space-x-3 pt-4">
         <button
           type="button"
           onClick={onCancel}
-          disabled={isSubmitting}
-          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={isSubmitting || loading}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-2"
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {(isSubmitting || loading) && <LoadingSpinner size="sm" />}
-          <span>{project ? 'Atualizar' : 'Criar'} Projeto</span>
+          {isSubmitting || loading ? 'Salvando...' : project ? 'Atualizar Projeto' : 'Criar Projeto'}
         </button>
       </div>
     </form>

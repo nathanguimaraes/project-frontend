@@ -10,7 +10,7 @@ import { ProjectForm } from '../../components/Projects/ProjectForm';
 import { useProject, useProjects } from '../../hooks/useProjects';
 import { PageLoadingSpinner } from '../../components/UI/LoadingSpinner';
 import { PageErrorMessage } from '../../components/UI/ErrorMessage';
-import { ProjectFormData } from '../../interfaces';
+import { ProjectFormData, ProjectUpdateData } from '../../interfaces';
 
 /**
  * Página de edição de projeto
@@ -18,13 +18,13 @@ import { ProjectFormData } from '../../interfaces';
 export const ProjectEdit: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { project, loading, error } = useProject(id!);
+  const { project, loading, error } = useProject(Number(id));
   const { updateProject } = useProjects();
 
   /**
    * Submete o formulário de edição
    */
-  const handleSubmit = async (data: ProjectFormData): Promise<boolean> => {
+  const handleSubmit = async (data: ProjectUpdateData): Promise<boolean> => {
     if (!project) return false;
     
     const success = await updateProject(project.id, data);

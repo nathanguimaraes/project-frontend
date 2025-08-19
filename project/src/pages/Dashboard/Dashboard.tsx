@@ -24,18 +24,31 @@ export const Dashboard: React.FC = () => {
     loading, 
     error, 
     deleteProject, 
-    refreshProjects 
+    refreshProjects,
+    removeProjectFromList,
+    addProjectToList
   } = useProjects();
+
+  // Debug: Log dos projetos recebidos
+  console.log('Dashboard - Projetos recebidos:', projects);
+  console.log('Dashboard - Loading:', loading);
+  console.log('Dashboard - Error:', error);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showEmptyColumns, setShowEmptyColumns] = useState(true);
 
   /**
    * Filtra projetos baseado na busca e filtros
    */
   const filteredProjects = React.useMemo(() => {
     let filtered = projects;
+
+    // Debug: Log do filtro
+    console.log('Filtro - Projetos originais:', projects.length);
+    console.log('Filtro - Termo de busca:', searchTerm);
+    console.log('Filtro - Status filtro:', statusFilter);
 
     // Filtro por termo de busca
     if (searchTerm.trim()) {
@@ -51,8 +64,20 @@ export const Dashboard: React.FC = () => {
       filtered = filtered.filter(project => project.status === statusFilter);
     }
 
+    console.log('Filtro - Projetos filtrados:', filtered.length);
     return filtered;
   }, [projects, searchTerm, statusFilter]);
+
+  /**
+   * Determina se deve mostrar colunas vazias
+   */
+  const shouldShowEmptyColumns = React.useMemo(() => {
+    // Se há filtros ativos, não mostra colunas vazias
+    if (searchTerm.trim() || statusFilter !== 'all') {
+      return false;
+    }
+    return showEmptyColumns;
+  }, [searchTerm, statusFilter, showEmptyColumns]);
 
   /**
    * Navega para edição do projeto
@@ -62,7 +87,7 @@ export const Dashboard: React.FC = () => {
   };
 
   /**
-   * Confirma e exclui projeto
+   * Confirma e exclui projeto com atualização reativa
    */
   const handleDeleteProject = async (project: Project) => {
     const confirmed = window.confirm(
@@ -70,7 +95,17 @@ export const Dashboard: React.FC = () => {
     );
     
     if (confirmed) {
-      await deleteProject(project.id);
+      // Remove otimisticamente da interface
+      removeProjectFromList(project.id);
+      
+      try {
+        await deleteProject(project.id);
+        toast.success('Projeto excluído com sucesso!');
+      } catch (error) {
+        // Em caso de erro, adiciona de volta
+        addProjectToList(project);
+        toast.error('Erro ao excluir projeto. Tente novamente.');
+      }
     }
   };
 
@@ -166,7 +201,53 @@ export const Dashboard: React.FC = () => {
               </select>
             </div>
           </div>
+
+          {/* Controle de visualização */}
+          <div className="sm:w-auto">
+            <label className="flex items-center space-x-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={showEmptyColumns}
+                onChange={(e) => setShowEmptyColumns(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+              />
+              <span>Mostrar colunas vazias</span>
+            </label>
+          </div>
         </div>
+
+        {/* Indicador de filtros ativos */}
+        {(searchTerm.trim() || statusFilter !== 'all') && (
+          <div className="mt-3 pt-3 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <span>Filtros ativos:</span>
+                {searchTerm.trim() && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Busca: "{searchTerm}"
+                  </span>
+                )}
+                {statusFilter !== 'all' && (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Status: {STATUS_LABELS[statusFilter]}
+                  </span>
+                )}
+                <span className="text-gray-500">
+                  • {filteredProjects.length} de {projects.length} projetos
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setStatusFilter('all');
+                }}
+                className="text-sm text-blue-600 hover:text-blue-800 transition-colors"
+              >
+                Limpar filtros
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Estatísticas rápidas */}
         <div className="mt-4 pt-4 border-t border-gray-200">
@@ -177,19 +258,19 @@ export const Dashboard: React.FC = () => {
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-orange-600">
-                {projects.filter(p => ['iniciado', 'planejado', 'em_andamento'].includes(p.status)).length}
+                {projects.filter(p => ['INICIADO', 'PLANEJADO', 'EM_ANDAMENTO'].includes(p.status)).length}
               </p>
               <p className="text-sm text-gray-600">Ativos</p>
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-green-600">
-                {projects.filter(p => p.status === 'encerrado').length}
+                {projects.filter(p => p.status === 'ENCERRADO').length}
               </p>
               <p className="text-sm text-gray-600">Encerrados</p>
             </div>
             <div className="text-center">
               <p className="text-2xl font-bold text-red-600">
-                {projects.filter(p => p.status === 'cancelado').length}
+                {projects.filter(p => p.status === 'CANCELADO').length}
               </p>
               <p className="text-sm text-gray-600">Cancelados</p>
             </div>
@@ -231,6 +312,7 @@ export const Dashboard: React.FC = () => {
             projects={filteredProjects}
             onEditProject={handleEditProject}
             onDeleteProject={handleDeleteProject}
+            showEmptyColumns={shouldShowEmptyColumns}
           />
         )}
       </div>

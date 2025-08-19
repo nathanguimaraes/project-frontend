@@ -1,108 +1,112 @@
 /**
  * Interfaces e tipos TypeScript para o sistema Planejão
  * Define a estrutura de dados para projetos, membros e relatórios
+ * Baseado nos DTOs do backend Spring Boot
  */
 
-// Status possíveis dos projetos seguindo o fluxo de negócio
+// Status possíveis dos projetos seguindo o fluxo de negócio do backend
 export type ProjectStatus = 
-  | 'em_analise'
-  | 'analise_realizada' 
-  | 'analise_aprovada'
-  | 'iniciado'
-  | 'planejado'
-  | 'em_andamento'
-  | 'encerrado'
-  | 'cancelado';
+  | 'EM_ANALISE'
+  | 'ANALISE_REALIZADA' 
+  | 'ANALISE_APROVADA'
+  | 'INICIADO'
+  | 'PLANEJADO'
+  | 'EM_ANDAMENTO'
+  | 'ENCERRADO'
+  | 'CANCELADO';
 
-// Níveis de risco baseados em orçamento e prazo
-export type RiskLevel = 'baixo' | 'medio' | 'alto';
-
-// Tipos de atribuição dos membros
-export type MemberRole = 'funcionario' | 'gerente' | 'terceirizado';
-
-// Interface principal do projeto
+// Interface principal do projeto baseada no ProjectDTO do backend
 export interface Project {
-  id: string;
+  id: number;
   nome: string;
-  dataInicio: string; // ISO date string
-  previsaoTermino: string; // ISO date string
-  dataRealTermino?: string; // ISO date string - opcional
-  orcamento: number;
+  dataInicio: string; // LocalDate do backend
+  previsaoTermino: string; // LocalDate do backend
+  dataRealTermino?: string; // LocalDate do backend - opcional
+  orcamentoTotal: number; // BigDecimal do backend
   descricao: string;
-  gerenteId: string; // ID do membro gerente
+  gerente: Member; // Objeto Member completo
   status: ProjectStatus;
-  membrosIds: string[]; // Array de IDs dos membros
-  risco: RiskLevel; // Calculado automaticamente
-  createdAt: string;
-  updatedAt: string;
+  risco: string;
+  membros: number[]; // Array de IDs dos membros
 }
 
-// Interface do membro da equipe
+// Interface do membro baseada no MemberDTO do backend
 export interface Member {
-  id: string;
+  id: number;
   nome: string;
-  atribuicao: MemberRole;
-  email?: string;
-  avatar?: string;
-  projetosAtivos: number; // Contador de projetos ativos
+  cargo: string;
 }
 
-// Interface para dados dos relatórios
+// Interface para dados dos relatórios baseada no ReportDTO do backend
 export interface ReportData {
-  projetosPorStatus: Record<ProjectStatus, number>;
-  orcamentoPorStatus: Record<ProjectStatus, number>;
-  mediaDuracaoEncerrados: number; // em dias
+  quantidadePorStatus: Record<string, number>;
+  totalOrcadoPorStatus: Record<string, number>;
+  mediaDuracaoEncerrados: number;
   totalMembrosUnicos: number;
-  projetosRisco: Record<RiskLevel, number>;
 }
 
-// Interface para formulário de projeto
+// Interface para formulário de projeto baseada no ProjectRequestDTO
 export interface ProjectFormData {
   nome: string;
   dataInicio: string;
   previsaoTermino: string;
-  dataRealTermino?: string;
-  orcamento: number;
+  dataRealTermino?: string; // Opcional para criação
+  orcamentoTotal: number;
   descricao: string;
-  gerenteId: string;
-  membrosIds: string[];
+  gerenteId: number;
+  membros: number[];
+}
+
+// Interface para atualização de projeto baseada no ProjectUpdateDTO
+export interface ProjectUpdateData {
+  nome?: string;
+  dataInicio?: string;
+  previsaoTermino?: string;
+  dataRealTermino?: string;
+  orcamentoTotal?: number;
+  descricao?: string;
+  gerenteId?: number;
+  // Nota: membros não está incluído no ProjectUpdateDTO do backend
 }
 
 // Interface para filtros e busca
 export interface ProjectFilters {
-  status?: ProjectStatus[];
-  risco?: RiskLevel[];
-  gerente?: string;
+  status?: ProjectStatus;
   search?: string;
 }
 
 // Mapeamento de status para labels em português
 export const STATUS_LABELS: Record<ProjectStatus, string> = {
-  em_analise: 'Em Análise',
-  analise_realizada: 'Análise Realizada',
-  analise_aprovada: 'Análise Aprovada',
-  iniciado: 'Iniciado',
-  planejado: 'Planejado',
-  em_andamento: 'Em Andamento',
-  encerrado: 'Encerrado',
-  cancelado: 'Cancelado'
-};
-
-// Mapeamento de risco para labels e cores
-export const RISK_CONFIG: Record<RiskLevel, { label: string; color: string; bgColor: string }> = {
-  baixo: { label: 'Baixo', color: 'text-green-700', bgColor: 'bg-green-100' },
-  medio: { label: 'Médio', color: 'text-yellow-700', bgColor: 'bg-yellow-100' },
-  alto: { label: 'Alto', color: 'text-red-700', bgColor: 'bg-red-100' }
+  EM_ANALISE: 'Em Análise',
+  ANALISE_REALIZADA: 'Análise Realizada',
+  ANALISE_APROVADA: 'Análise Aprovada',
+  INICIADO: 'Iniciado',
+  PLANEJADO: 'Planejado',
+  EM_ANDAMENTO: 'Em Andamento',
+  ENCERRADO: 'Encerrado',
+  CANCELADO: 'Cancelado'
 };
 
 // Configuração de cores para status
 export const STATUS_COLORS: Record<ProjectStatus, string> = {
-  em_analise: 'bg-gray-100 text-gray-800',
-  analise_realizada: 'bg-blue-100 text-blue-800',
-  analise_aprovada: 'bg-indigo-100 text-indigo-800',
-  iniciado: 'bg-purple-100 text-purple-800',
-  planejado: 'bg-cyan-100 text-cyan-800',
-  em_andamento: 'bg-orange-100 text-orange-800',
-  encerrado: 'bg-green-100 text-green-800',
-  cancelado: 'bg-red-100 text-red-800'
+  EM_ANALISE: 'bg-gray-100 text-gray-800',
+  ANALISE_REALIZADA: 'bg-blue-100 text-blue-800',
+  ANALISE_APROVADA: 'bg-indigo-100 text-indigo-800',
+  INICIADO: 'bg-purple-100 text-purple-800',
+  PLANEJADO: 'bg-cyan-100 text-cyan-800',
+  EM_ANDAMENTO: 'bg-orange-100 text-orange-800',
+  ENCERRADO: 'bg-green-100 text-green-800',
+  CANCELADO: 'bg-red-100 text-red-800'
+};
+
+// Mapeamento de status para cores do Kanban
+export const KANBAN_COLORS: Record<ProjectStatus, string> = {
+  EM_ANALISE: 'bg-gray-50 border-gray-200',
+  ANALISE_REALIZADA: 'bg-blue-50 border-blue-200',
+  ANALISE_APROVADA: 'bg-indigo-50 border-indigo-200',
+  INICIADO: 'bg-purple-50 border-purple-200',
+  PLANEJADO: 'bg-cyan-50 border-cyan-200',
+  EM_ANDAMENTO: 'bg-orange-50 border-orange-200',
+  ENCERRADO: 'bg-green-50 border-green-200',
+  CANCELADO: 'bg-red-50 border-red-200'
 };

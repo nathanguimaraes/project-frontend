@@ -1,6 +1,7 @@
 /**
  * Componente KanbanBoard - Quadro Kanban principal
  * Gerencia o drag & drop entre colunas e exibe todos os projetos
+ * Sistema reativo que atualiza em tempo real
  */
 
 import React, { useState } from 'react';
@@ -24,6 +25,7 @@ interface KanbanBoardProps {
   projects: Project[];
   onEditProject?: (project: Project) => void;
   onDeleteProject?: (project: Project) => void;
+  showEmptyColumns?: boolean;
 }
 
 /**
@@ -32,10 +34,17 @@ interface KanbanBoardProps {
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   projects,
   onEditProject,
-  onDeleteProject
+  onDeleteProject,
+  showEmptyColumns = true
 }) => {
-  const { updateProjectStatus } = useProjects();
+  const { updateProjectStatus, updateProjectInList } = useProjects();
   const [activeProject, setActiveProject] = useState<Project | null>(null);
+  const [optimisticProjects, setOptimisticProjects] = useState<Project[]>(projects);
+
+  // Atualiza o estado otimista quando os projetos mudam
+  React.useEffect(() => {
+    setOptimisticProjects(projects);
+  }, [projects]);
 
   // Configuração dos sensores para drag & drop
   const sensors = useSensors(
@@ -48,32 +57,42 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   // Status das colunas na ordem correta
   const columnOrder: ProjectStatus[] = [
-    'em_analise',
-    'analise_realizada',
-    'analise_aprovada',
-    'iniciado',
-    'planejado',
-    'em_andamento',
-    'encerrado',
-    'cancelado'
+    'EM_ANALISE',
+    'ANALISE_REALIZADA',
+    'ANALISE_APROVADA',
+    'INICIADO',
+    'PLANEJADO',
+    'EM_ANDAMENTO',
+    'ENCERRADO',
+    'CANCELADO'
   ];
 
   /**
-   * Agrupa projetos por status
+   * Agrupa projetos por status (usando estado otimista)
    */
   const projectsByStatus = React.useMemo(() => {
     return columnOrder.reduce((acc, status) => {
-      acc[status] = projects.filter(project => project.status === status);
+      acc[status] = optimisticProjects.filter(project => project.status === status);
       return acc;
     }, {} as Record<ProjectStatus, Project[]>);
-  }, [projects]);
+  }, [optimisticProjects]);
+
+  /**
+   * Filtra colunas que devem ser exibidas
+   */
+  const visibleColumns = React.useMemo(() => {
+    if (showEmptyColumns) {
+      return columnOrder;
+    }
+    return columnOrder.filter(status => projectsByStatus[status].length > 0);
+  }, [columnOrder, projectsByStatus, showEmptyColumns]);
 
   /**
    * Inicia o drag de um projeto
    */
   const handleDragStart = (event: DragStartEvent) => {
     const { active } = event;
-    const project = projects.find(p => p.id === active.id);
+    const project = optimisticProjects.find(p => p.id === active.id);
     setActiveProject(project || null);
   };
 
@@ -86,10 +105,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
     if (!over) return;
 
-    const projectId = active.id as string;
+    const projectId = active.id as number;
     const newStatus = over.id as ProjectStatus;
     
-    const project = projects.find(p => p.id === projectId);
+    const project = optimisticProjects.find(p => p.id === projectId);
     if (!project) return;
 
     // Verifica se o status mudou
@@ -101,8 +120,28 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       return;
     }
 
-    // Atualiza o status do projeto
-    await updateProjectStatus(projectId, newStatus);
+    // Atualização otimista - atualiza imediatamente na interface
+    const optimisticProject = { ...project, status: newStatus };
+    setOptimisticProjects(prev => 
+      prev.map(p => p.id === projectId ? optimisticProject : p)
+    );
+
+    try {
+      // Chama a API para persistir a mudança
+      await updateProjectStatus(projectId, newStatus);
+      
+      // Atualiza o estado global com o projeto otimista
+      updateProjectInList(optimisticProject);
+      
+      toast.success(`Projeto movido para: ${newStatus.replace('_', ' ')}`);
+    } catch (error) {
+      // Em caso de erro, reverte para o estado anterior
+      setOptimisticProjects(prev => 
+        prev.map(p => p.id === projectId ? project : p)
+      );
+      
+      toast.error('Erro ao mover projeto. Tente novamente.');
+    }
   };
 
   return (
@@ -112,7 +151,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       onDragEnd={handleDragEnd}
     >
       <div className="flex space-x-6 overflow-x-auto pb-6">
-        {columnOrder.map((status) => (
+        {visibleColumns.map((status) => (
           <KanbanColumn
             key={status}
             status={status}

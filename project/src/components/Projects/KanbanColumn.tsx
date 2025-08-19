@@ -34,14 +34,14 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   // Cores para diferentes status
   const getColumnColor = (status: ProjectStatus) => {
     const colors = {
-      em_analise: 'border-gray-300 bg-gray-50',
-      analise_realizada: 'border-blue-300 bg-blue-50',
-      analise_aprovada: 'border-indigo-300 bg-indigo-50',
-      iniciado: 'border-purple-300 bg-purple-50',
-      planejado: 'border-cyan-300 bg-cyan-50',
-      em_andamento: 'border-orange-300 bg-orange-50',
-      encerrado: 'border-green-300 bg-green-50',
-      cancelado: 'border-red-300 bg-red-50'
+      EM_ANALISE: 'border-gray-300 bg-gray-50',
+      ANALISE_REALIZADA: 'border-blue-300 bg-blue-50',
+      ANALISE_APROVADA: 'border-indigo-300 bg-indigo-50',
+      INICIADO: 'border-purple-300 bg-purple-50',
+      PLANEJADO: 'border-cyan-300 bg-cyan-50',
+      EM_ANDAMENTO: 'border-orange-300 bg-orange-50',
+      ENCERRADO: 'border-green-300 bg-green-50',
+      CANCELADO: 'border-red-300 bg-red-50'
     };
     return colors[status] || 'border-gray-300 bg-gray-50';
   };
@@ -68,7 +68,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
         {/* Lista de projetos */}
         <div
           ref={setNodeRef}
-          className="p-4 space-y-3 min-h-80"
+          className="p-4 space-y-3 min-h-80 transition-all duration-200"
         >
           <SortableContext 
             items={projects.map(p => p.id)} 
@@ -86,7 +86,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
 
           {/* Placeholder quando vazio */}
           {projects.length === 0 && (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-8 text-gray-400 transition-opacity duration-200">
               <p className="text-sm">Nenhum projeto</p>
             </div>
           )}

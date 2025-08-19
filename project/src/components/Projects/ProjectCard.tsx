@@ -1,15 +1,15 @@
 /**
  * Componente ProjectCard - Card individual de projeto para o Kanban
  * Exibe informações resumidas do projeto com ações rápidas
+ * Integrado com o backend Spring Boot
  */
 
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, DollarSign, Users, Edit, Trash2, Eye } from 'lucide-react';
 import { Project } from '../../interfaces';
-import { StatusBadge, RiskBadge } from '../UI/Badge';
+import { StatusBadge } from '../UI/Badge';
 import { formatCurrency, formatDate, canDeleteProject } from '../../utils';
-import { useMembers } from '../../hooks/useMembers';
 
 interface ProjectCardProps {
   project: Project;
@@ -27,18 +27,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
   onDelete,
   isDragging = false
 }) => {
-  const { getMemberById } = useMembers();
-  
-  // Busca informações do gerente
-  const gerente = getMemberById(project.gerenteId);
-  
   // Verifica se pode excluir o projeto
   const canDelete = canDeleteProject(project.status);
 
   return (
     <div className={`
-      bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md transition-all duration-200
-      ${isDragging ? 'opacity-50 rotate-2 scale-105' : ''}
+      bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md 
+      transition-all duration-200 ease-in-out transform hover:scale-[1.02]
+      ${isDragging ? 'opacity-50 rotate-2 scale-105 shadow-lg' : ''}
     `}>
       {/* Header do card */}
       <div className="flex items-start justify-between mb-3">
@@ -48,7 +44,12 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           </h3>
           <div className="flex items-center space-x-2 mt-1">
             <StatusBadge status={project.status} />
-            <RiskBadge risk={project.risco} />
+            {/* Indicador de risco */}
+            <div className={`
+              w-2 h-2 rounded-full 
+              ${project.risco === 'Baixo' ? 'bg-green-400' : 
+                project.risco === 'Medio' ? 'bg-yellow-400' : 'bg-red-400'}
+            `} />
           </div>
         </div>
         
@@ -94,7 +95,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
         {/* Orçamento */}
         <div className="flex items-center text-xs text-gray-600">
           <DollarSign className="w-3 h-3 mr-1.5 text-green-500" />
-          <span>{formatCurrency(project.orcamento)}</span>
+          <span>{formatCurrency(project.orcamentoTotal)}</span>
         </div>
 
         {/* Datas */}
@@ -105,40 +106,30 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({
           </span>
         </div>
 
-        {/* Membros */}
+        {/* Gerente */}
         <div className="flex items-center text-xs text-gray-600">
           <Users className="w-3 h-3 mr-1.5 text-purple-500" />
-          <span>{project.membrosIds.length} membros</span>
+          <span className="truncate">
+            Gerente: {project.gerente?.nome || 'Não definido'}
+          </span>
         </div>
 
-        {/* Gerente */}
-        {gerente && (
-          <div className="flex items-center mt-2">
-            <div className="flex items-center space-x-2">
-              {gerente.avatar && (
-                <img
-                  src={gerente.avatar}
-                  alt={gerente.nome}
-                  className="w-5 h-5 rounded-full object-cover"
-                />
-              )}
-              <span className="text-xs text-gray-600 truncate">
-                {gerente.nome}
-              </span>
-            </div>
+        {/* Número de membros */}
+        <div className="flex items-center text-xs text-gray-600">
+          <Users className="w-3 h-3 mr-1.5 text-indigo-500" />
+          <span>
+            {project.membros?.length || 0} membro{project.membros?.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        {/* Risco */}
+        {project.risco && (
+          <div className="flex items-center text-xs text-gray-600">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 mr-1.5"></span>
+            <span>Risco: {project.risco}</span>
           </div>
         )}
       </div>
-
-      {/* Data real de término (se encerrado) */}
-      {project.status === 'encerrado' && project.dataRealTermino && (
-        <div className="mt-3 pt-2 border-t border-gray-100">
-          <div className="flex items-center text-xs text-gray-500">
-            <Calendar className="w-3 h-3 mr-1.5" />
-            <span>Encerrado em: {formatDate(project.dataRealTermino)}</span>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

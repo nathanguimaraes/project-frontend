@@ -20,7 +20,7 @@ import {
 import { useProject } from '../../hooks/useProjects';
 import { useMembers } from '../../hooks/useMembers';
 import { useProjects } from '../../hooks/useProjects';
-import { StatusBadge, RiskBadge } from '../../components/UI/Badge';
+import { StatusBadge } from '../../components/UI/Badge';
 import { PageLoadingSpinner } from '../../components/UI/LoadingSpinner';
 import { PageErrorMessage } from '../../components/UI/ErrorMessage';
 import { 
@@ -38,7 +38,7 @@ import toast from 'react-hot-toast';
 export const ProjectShow: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { project, loading, error } = useProject(id!);
+  const { project, loading, error } = useProject(Number(id));
   const { getMemberById } = useMembers();
   const { deleteProject } = useProjects();
 
@@ -75,8 +75,8 @@ export const ProjectShow: React.FC = () => {
   }
 
   // Busca informações dos membros
-  const gerente = getMemberById(project.gerenteId);
-  const membros = project.membrosIds.map(id => getMemberById(id)).filter(Boolean);
+  const gerente = project.gerente;
+  const membros = project.membros.map(id => getMemberById(id)).filter(Boolean);
   
   // Cálculos
   const duracaoPlanejada = calculateProjectDuration(project.dataInicio, project.previsaoTermino);
@@ -103,7 +103,6 @@ export const ProjectShow: React.FC = () => {
             </h1>
             <div className="flex items-center space-x-3 mt-2">
               <StatusBadge status={project.status} size="md" />
-              <RiskBadge risk={project.risco} size="md" />
               {isDelayed && (
                 <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
                   <AlertTriangle className="w-3 h-3" />
@@ -168,37 +167,41 @@ export const ProjectShow: React.FC = () => {
 
               <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <Clock className="w-5 h-5 text-orange-600" />
+                  <Calendar className="w-5 h-5 text-orange-600" />
                   <div>
                     <p className="font-medium text-gray-900">Previsão de Término</p>
                     <p className="text-sm text-gray-600">{formatDate(project.previsaoTermino)}</p>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-sm font-medium text-gray-900">
-                    {duracaoPlanejada} dias
-                  </p>
-                  <p className="text-xs text-gray-500">Duração planejada</p>
                 </div>
               </div>
 
               {project.dataRealTermino && (
                 <div className="flex items-center justify-between p-4 bg-green-50 rounded-lg">
                   <div className="flex items-center space-x-3">
-                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <Calendar className="w-5 h-5 text-green-600" />
                     <div>
                       <p className="font-medium text-gray-900">Data Real de Término</p>
                       <p className="text-sm text-gray-600">{formatDate(project.dataRealTermino)}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium text-gray-900">
-                      {duracaoReal} dias
-                    </p>
-                    <p className="text-xs text-gray-500">Duração real</p>
-                  </div>
                 </div>
               )}
+            </div>
+
+            {/* Duração */}
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">Duração Planejada</p>
+                  <p className="text-lg font-semibold text-gray-900">{duracaoPlanejada} dias</p>
+                </div>
+                {duracaoReal && (
+                  <div className="text-center p-3 bg-gray-50 rounded-lg">
+                    <p className="text-sm text-gray-600">Duração Real</p>
+                    <p className="text-lg font-semibold text-gray-900">{duracaoReal} dias</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -207,121 +210,105 @@ export const ProjectShow: React.FC = () => {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Equipe do Projeto
             </h2>
-
-            {/* Gerente */}
-            {gerente && (
-              <div className="mb-6">
-                <h3 className="text-sm font-medium text-gray-700 mb-3">Gerente</h3>
-                <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
-                  {gerente.avatar && (
-                    <img
-                      src={gerente.avatar}
-                      alt={gerente.nome}
-                      className="w-10 h-10 rounded-full object-cover"
-                    />
-                  )}
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{gerente.nome}</p>
-                    <p className="text-sm text-gray-600">{gerente.email}</p>
-                  </div>
-                  <User className="w-5 h-5 text-purple-600" />
-                </div>
-              </div>
-            )}
-
-            {/* Membros */}
-            <div>
-              <h3 className="text-sm font-medium text-gray-700 mb-3">
-                Membros ({membros.length})
-              </h3>
-              <div className="space-y-2">
-                {membros.map((membro) => (
-                  <div key={membro.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                    {membro.avatar && (
-                      <img
-                        src={membro.avatar}
-                        alt={membro.nome}
-                        className="w-8 h-8 rounded-full object-cover"
-                      />
-                    )}
-                    <div className="flex-1">
-                      <p className="font-medium text-gray-900">{membro.nome}</p>
-                      <p className="text-sm text-gray-600">{membro.email}</p>
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {membro.projetosAtivos}/3 projetos
+            
+            <div className="space-y-4">
+              {/* Gerente */}
+              <div className="p-4 bg-blue-50 rounded-lg">
+                <h3 className="font-medium text-gray-900 mb-2">Gerente</h3>
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-blue-600 font-medium text-sm">
+                      {gerente?.nome?.charAt(0)?.toUpperCase() || 'G'}
                     </span>
                   </div>
-                ))}
+                  <div>
+                    <p className="font-medium text-gray-900">{gerente?.nome || 'Não definido'}</p>
+                    <p className="text-sm text-gray-600">{gerente?.cargo || 'Gerente'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Membros */}
+              <div>
+                <h3 className="font-medium text-gray-900 mb-2">Membros da Equipe</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {membros.map((membro) => (
+                    <div key={membro?.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                      <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                        <span className="text-gray-600 font-medium text-xs">
+                          {membro?.nome?.charAt(0)?.toUpperCase() || 'M'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-900">{membro?.nome || 'Membro'}</p>
+                        <p className="text-sm text-gray-600">{membro?.cargo || 'Funcionário'}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {membros.length === 0 && (
+                  <p className="text-gray-500 text-sm">Nenhum membro associado ao projeto</p>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Sidebar com informações resumidas */}
+        {/* Sidebar */}
         <div className="space-y-6">
-          {/* Orçamento */}
+          {/* Informações rápidas */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <DollarSign className="w-5 h-5 text-green-600" />
-              <h3 className="text-lg font-semibold text-gray-900">Orçamento</h3>
-            </div>
-            <p className="text-2xl font-bold text-green-600">
-              {formatCurrency(project.orcamento)}
-            </p>
-          </div>
-
-          {/* Estatísticas */}
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Estatísticas
-            </h3>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Informações do Projeto
+            </h2>
             
             <div className="space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Duração Planejada</span>
-                <span className="font-medium">{duracaoPlanejada} dias</span>
+                <span className="text-sm text-gray-600">Status</span>
+                <StatusBadge status={project.status} />
               </div>
-              
-              {duracaoReal && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Duração Real</span>
-                  <span className="font-medium">{duracaoReal} dias</span>
-                </div>
-              )}
-              
+
               <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600">Membros</span>
-                <span className="font-medium">{project.membrosIds.length}</span>
+                <span className="text-sm text-gray-600">Orçamento</span>
+                <span className="font-medium">{formatCurrency(project.orcamentoTotal)}</span>
               </div>
-              
+
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Nível de Risco</span>
-                <RiskBadge risk={project.risco} />
+                <span className="font-medium">{project.risco}</span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">Total de Membros</span>
+                <span className="font-medium">{project.membros.length}</span>
               </div>
             </div>
           </div>
 
-          {/* Histórico */}
+          {/* Ações rápidas */}
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Histórico
-            </h3>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+              Ações Rápidas
+            </h2>
             
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Criado em:</span>
-                <span className="font-medium">
-                  {formatDate(project.createdAt.split('T')[0])}
-                </span>
-              </div>
-              
-              <div className="flex justify-between">
-                <span className="text-gray-600">Última atualização:</span>
-                <span className="font-medium">
-                  {formatDate(project.updatedAt.split('T')[0])}
-                </span>
-              </div>
+            <div className="space-y-3">
+              <button
+                onClick={() => navigate(`/projects/${project.id}/edit`)}
+                className="w-full flex items-center justify-center space-x-2 px-4 py-2 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+              >
+                <Edit className="w-4 h-4" />
+                <span>Editar Projeto</span>
+              </button>
+
+              {canDelete && (
+                <button
+                  onClick={handleDelete}
+                  className="w-full flex items-center justify-center space-x-2 px-4 py-2 text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Excluir Projeto</span>
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -1,11 +1,11 @@
 /**
  * Componente Badge - Etiquetas coloridas para status e categorias
  * Badges reutilizáveis com diferentes variantes e cores
+ * Integrado com o backend Spring Boot
  */
 
 import React from 'react';
-import { ProjectStatus, RiskLevel } from '../../interfaces';
-import { STATUS_COLORS, RISK_CONFIG } from '../../interfaces';
+import { ProjectStatus, STATUS_COLORS } from '../../interfaces';
 
 interface BadgeProps {
   children: React.ReactNode;
@@ -60,14 +60,14 @@ interface StatusBadgeProps {
 
 export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'sm' }) => {
   const statusLabels: Record<ProjectStatus, string> = {
-    em_analise: 'Em Análise',
-    analise_realizada: 'Análise Realizada',
-    analise_aprovada: 'Análise Aprovada',
-    iniciado: 'Iniciado',
-    planejado: 'Planejado',
-    em_andamento: 'Em Andamento',
-    encerrado: 'Encerrado',
-    cancelado: 'Cancelado'
+    EM_ANALISE: 'Em Análise',
+    ANALISE_REALIZADA: 'Análise Realizada',
+    ANALISE_APROVADA: 'Análise Aprovada',
+    INICIADO: 'Iniciado',
+    PLANEJADO: 'Planejado',
+    EM_ANDAMENTO: 'Em Andamento',
+    ENCERRADO: 'Encerrado',
+    CANCELADO: 'Cancelado'
   };
 
   return (
@@ -77,28 +77,6 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, size = 'sm' })
       ${STATUS_COLORS[status]}
     `}>
       {statusLabels[status]}
-    </span>
-  );
-};
-
-/**
- * Badge específico para nível de risco
- */
-interface RiskBadgeProps {
-  risk: RiskLevel;
-  size?: 'sm' | 'md';
-}
-
-export const RiskBadge: React.FC<RiskBadgeProps> = ({ risk, size = 'sm' }) => {
-  const config = RISK_CONFIG[risk];
-
-  return (
-    <span className={`
-      inline-flex items-center font-medium rounded-full
-      ${size === 'sm' ? 'px-2.5 py-0.5 text-xs' : 'px-3 py-1 text-sm'}
-      ${config.bgColor} ${config.color}
-    `}>
-      {config.label}
     </span>
   );
 };

@@ -1,12 +1,12 @@
 /**
  * Hook customizado para gerenciar estado e operações dos membros
  * Centraliza a lógica de busca e validações de membros da equipe
+ * Integrado com o backend Spring Boot
  */
 
 import { useState, useEffect, useCallback } from 'react';
 import { Member } from '../interfaces';
-import { memberService } from '../services/mockData';
-import { canAssignMemberToProject } from '../utils';
+import { memberService } from '../services/memberService';
 import toast from 'react-hot-toast';
 
 interface UseMembersReturn {
@@ -15,9 +15,9 @@ interface UseMembersReturn {
   gerentes: Member[];
   loading: boolean;
   error: string | null;
-  getMemberById: (id: string) => Member | undefined;
-  canAssignMember: (memberId: string) => boolean;
-  getAvailableMembers: () => Member[];
+  getMemberById: (id: number) => Member | undefined;
+  createMember: (nome: string, cargo: string) => Promise<boolean>;
+  searchMembers: (term: string) => Promise<Member[]>;
   refreshMembers: () => Promise<void>;
 }
 
@@ -61,28 +61,58 @@ export const useMembers = (): UseMembersReturn => {
   /**
    * Busca um membro por ID
    */
-  const getMemberById = useCallback((id: string): Member | undefined => {
+  const getMemberById = useCallback((id: number): Member | undefined => {
     return members.find(member => member.id === id);
   }, [members]);
 
   /**
-   * Verifica se um membro pode ser atribuído a mais projetos
-   * Regra: máximo 3 projetos ativos por membro
+   * Cria um novo membro
    */
-  const canAssignMember = useCallback((memberId: string): boolean => {
-    const member = getMemberById(memberId);
-    if (!member) return false;
-    
-    return canAssignMemberToProject(member);
-  }, [getMemberById]);
+  const createMember = useCallback(async (nome: string, cargo: string): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      if (!nome.trim()) {
+        toast.error('Nome do membro é obrigatório');
+        return false;
+      }
+
+      if (!cargo.trim()) {
+        toast.error('Cargo do membro é obrigatório');
+        return false;
+      }
+
+      const newMember = await memberService.create(nome, cargo);
+      setMembers(prev => [...prev, newMember]);
+      
+      // Atualiza as listas separadas
+      if (cargo.toLowerCase().includes('gerente') || cargo.toLowerCase().includes('manager')) {
+        setGerentes(prev => [...prev, newMember]);
+      } else {
+        setFuncionarios(prev => [...prev, newMember]);
+      }
+      
+      toast.success('Membro criado com sucesso!');
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao criar membro';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    }
+  }, []);
 
   /**
-   * Retorna apenas membros disponíveis para novos projetos
-   * (funcionários com menos de 3 projetos ativos)
+   * Busca membros por termo
    */
-  const getAvailableMembers = useCallback((): Member[] => {
-    return funcionarios.filter(member => canAssignMemberToProject(member));
-  }, [funcionarios]);
+  const searchMembers = useCallback(async (term: string): Promise<Member[]> => {
+    try {
+      return await memberService.search(term);
+    } catch (err) {
+      console.error('Erro ao buscar membros:', err);
+      return [];
+    }
+  }, []);
 
   /**
    * Recarrega a lista de membros
@@ -103,8 +133,8 @@ export const useMembers = (): UseMembersReturn => {
     loading,
     error,
     getMemberById,
-    canAssignMember,
-    getAvailableMembers,
+    createMember,
+    searchMembers,
     refreshMembers
   };
 };
@@ -112,7 +142,7 @@ export const useMembers = (): UseMembersReturn => {
 /**
  * Hook específico para buscar um membro por ID
  */
-export const useMember = (id: string) => {
+export const useMember = (id: number) => {
   const [member, setMember] = useState<Member | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

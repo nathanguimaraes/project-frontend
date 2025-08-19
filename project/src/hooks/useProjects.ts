@@ -1,11 +1,12 @@
 /**
  * Hook customizado para gerenciar estado e operações dos projetos
  * Centraliza toda a lógica de CRUD e validações de projetos
+ * Integrado com o backend Spring Boot
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Project, ProjectStatus, ProjectFormData } from '../interfaces';
-import { projectService } from '../services/mockData';
+import { Project, ProjectStatus, ProjectFormData, ProjectUpdateData } from '../interfaces';
+import { projectService } from '../services/projectService';
 import { canChangeStatus, canDeleteProject } from '../utils';
 import toast from 'react-hot-toast';
 
@@ -14,11 +15,17 @@ interface UseProjectsReturn {
   loading: boolean;
   error: string | null;
   createProject: (data: ProjectFormData) => Promise<boolean>;
-  updateProject: (id: string, data: Partial<Project>) => Promise<boolean>;
-  deleteProject: (id: string) => Promise<boolean>;
-  updateProjectStatus: (id: string, newStatus: ProjectStatus) => Promise<boolean>;
+  updateProject: (id: number, data: ProjectUpdateData) => Promise<boolean>;
+  deleteProject: (id: number) => Promise<boolean>;
+  updateProjectStatus: (id: number, newStatus: ProjectStatus) => Promise<boolean>;
   refreshProjects: () => Promise<void>;
-  getProjectById: (id: string) => Project | undefined;
+  getProjectById: (id: number) => Project | undefined;
+  changeStatus: (id: number, newStatus: ProjectStatus) => Promise<boolean>;
+  addMember: (projectId: number, memberId: number) => Promise<boolean>;
+  removeMember: (projectId: number, memberId: number) => Promise<boolean>;
+  updateProjectInList: (updatedProject: Project) => void;
+  removeProjectFromList: (projectId: number) => void;
+  addProjectToList: (newProject: Project) => void;
 }
 
 /**
@@ -30,16 +37,20 @@ export const useProjects = (): UseProjectsReturn => {
   const [error, setError] = useState<string | null>(null);
 
   /**
-   * Carrega todos os projetos do serviço
+   * Carrega todos os projetos do backend
    */
   const loadProjects = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await projectService.getAll();
-      setProjects(data);
+      
+      console.log('Carregando projetos...');
+      const response = await projectService.getAll();
+      console.log('Projetos carregados:', response.content.length);
+      
+      setProjects(response.content);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao carregar projetos';
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
@@ -65,17 +76,17 @@ export const useProjects = (): UseProjectsReturn => {
         return false;
       }
 
-      if (data.membrosIds.length === 0) {
+      if (data.membros.length === 0) {
         toast.error('Pelo menos um membro deve ser selecionado');
         return false;
       }
 
-      if (data.membrosIds.length > 10) {
+      if (data.membros.length > 10) {
         toast.error('Máximo de 10 membros por projeto');
         return false;
       }
 
-      if (data.orcamento <= 0) {
+      if (data.orcamentoTotal <= 0) {
         toast.error('Orçamento deve ser maior que zero');
         return false;
       }
@@ -89,11 +100,7 @@ export const useProjects = (): UseProjectsReturn => {
         return false;
       }
 
-      const newProject = await projectService.create({
-        ...data,
-        status: 'em_analise' // Status inicial sempre é "em_analise"
-      });
-
+      const newProject = await projectService.create(data);
       setProjects(prev => [...prev, newProject]);
       toast.success('Projeto criado com sucesso!');
       return true;
@@ -108,19 +115,13 @@ export const useProjects = (): UseProjectsReturn => {
   /**
    * Atualiza um projeto existente
    */
-  const updateProject = useCallback(async (id: string, data: Partial<Project>): Promise<boolean> => {
+  const updateProject = useCallback(async (id: number, data: ProjectUpdateData): Promise<boolean> => {
     try {
       setError(null);
       
       const currentProject = projects.find(p => p.id === id);
       if (!currentProject) {
         toast.error('Projeto não encontrado');
-        return false;
-      }
-
-      // Validação de mudança de status
-      if (data.status && !canChangeStatus(currentProject.status, data.status)) {
-        toast.error('Mudança de status não permitida');
         return false;
       }
 
@@ -145,7 +146,7 @@ export const useProjects = (): UseProjectsReturn => {
   /**
    * Exclui um projeto
    */
-  const deleteProject = useCallback(async (id: string): Promise<boolean> => {
+  const deleteProject = useCallback(async (id: number): Promise<boolean> => {
     try {
       setError(null);
       
@@ -177,7 +178,7 @@ export const useProjects = (): UseProjectsReturn => {
   /**
    * Atualiza apenas o status do projeto (usado no drag & drop)
    */
-  const updateProjectStatus = useCallback(async (id: string, newStatus: ProjectStatus): Promise<boolean> => {
+  const updateProjectStatus = useCallback(async (id: number, newStatus: ProjectStatus): Promise<boolean> => {
     try {
       setError(null);
       
@@ -193,8 +194,9 @@ export const useProjects = (): UseProjectsReturn => {
         return false;
       }
 
-      const updatedProject = await projectService.updateStatus(id, newStatus);
+      const updatedProject = await projectService.changeStatus(id, newStatus);
       
+      // Atualiza o projeto na lista local de forma reativa
       setProjects(prev => 
         prev.map(project => 
           project.id === id ? updatedProject : project
@@ -212,6 +214,112 @@ export const useProjects = (): UseProjectsReturn => {
   }, [projects]);
 
   /**
+   * Atualiza um projeto específico na lista local (para atualizações reativas)
+   */
+  const updateProjectInList = useCallback((updatedProject: Project) => {
+    setProjects(prev => 
+      prev.map(project => 
+        project.id === updatedProject.id ? updatedProject : project
+      )
+    );
+  }, []);
+
+  /**
+   * Remove um projeto da lista local (para exclusões reativas)
+   */
+  const removeProjectFromList = useCallback((projectId: number) => {
+    setProjects(prev => prev.filter(project => project.id !== projectId));
+  }, []);
+
+  /**
+   * Adiciona um projeto à lista local (para criações reativas)
+   */
+  const addProjectToList = useCallback((newProject: Project) => {
+    setProjects(prev => [...prev, newProject]);
+  }, []);
+
+  /**
+   * Altera o status do projeto usando o endpoint específico
+   */
+  const changeStatus = useCallback(async (id: number, newStatus: ProjectStatus): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      const currentProject = projects.find(p => p.id === id);
+      if (!currentProject) {
+        toast.error('Projeto não encontrado');
+        return false;
+      }
+
+      const updatedProject = await projectService.changeStatus(id, newStatus);
+      
+      setProjects(prev => 
+        prev.map(project => 
+          project.id === id ? updatedProject : project
+        )
+      );
+
+      toast.success(`Status alterado para: ${newStatus.replace('_', ' ')}`);
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao alterar status';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    }
+  }, [projects]);
+
+  /**
+   * Adiciona um membro ao projeto
+   */
+  const addMember = useCallback(async (projectId: number, memberId: number): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      const updatedProject = await projectService.addMember(projectId, memberId);
+      
+      setProjects(prev => 
+        prev.map(project => 
+          project.id === projectId ? updatedProject : project
+        )
+      );
+
+      toast.success('Membro adicionado ao projeto com sucesso!');
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao adicionar membro';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    }
+  }, []);
+
+  /**
+   * Remove um membro do projeto
+   */
+  const removeMember = useCallback(async (projectId: number, memberId: number): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      const updatedProject = await projectService.removeMember(projectId, memberId);
+      
+      setProjects(prev => 
+        prev.map(project => 
+          project.id === projectId ? updatedProject : project
+        )
+      );
+
+      toast.success('Membro removido do projeto com sucesso!');
+      return true;
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao remover membro';
+      setError(errorMessage);
+      toast.error(errorMessage);
+      return false;
+    }
+  }, []);
+
+  /**
    * Recarrega a lista de projetos
    */
   const refreshProjects = useCallback(async () => {
@@ -221,7 +329,7 @@ export const useProjects = (): UseProjectsReturn => {
   /**
    * Busca um projeto por ID
    */
-  const getProjectById = useCallback((id: string): Project | undefined => {
+  const getProjectById = useCallback((id: number): Project | undefined => {
     return projects.find(project => project.id === id);
   }, [projects]);
 
@@ -239,14 +347,20 @@ export const useProjects = (): UseProjectsReturn => {
     deleteProject,
     updateProjectStatus,
     refreshProjects,
-    getProjectById
+    getProjectById,
+    changeStatus,
+    addMember,
+    removeMember,
+    updateProjectInList,
+    removeProjectFromList,
+    addProjectToList
   };
 };
 
 /**
  * Hook para buscar um projeto específico por ID
  */
-export const useProject = (id: string) => {
+export const useProject = (id: number) => {
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

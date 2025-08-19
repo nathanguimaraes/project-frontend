@@ -7,7 +7,7 @@ Um sistema para gerenciar o portfólio de projetos de uma empresa. Esse sistema 
 ## Screenshots
 
 ### Dashboard Principal - Quadro Kanban
-![Dashboard Principal](screenshots/img-1.png)
+![Dashboard Principal](project/screenshots/img-1.png)
 
 O dashboard principal apresenta um quadro Kanban interativo com projetos organizados por status. Inclui:
 - Filtros de busca e status
@@ -16,7 +16,7 @@ O dashboard principal apresenta um quadro Kanban interativo com projetos organiz
 - Controles de visualização (mostrar/ocultar colunas vazias)
 
 ### Relatórios do Portfólio
-![Relatórios](screenshots/img-2.png)
+![Relatórios](project/screenshots/img-2.png)
 
 A página de relatórios oferece análises detalhadas do portfólio:
 - KPIs principais (Total de Projetos, Projetos Ativos, Orçamento Total, Membros Únicos)
@@ -25,7 +25,7 @@ A página de relatórios oferece análises detalhadas do portfólio:
 - Tabela de detalhamento por status
 
 ### Criação de Novo Projeto
-![Criação de Projeto](screenshots/img-3.png)
+![Criação de Projeto](project/screenshots/img-3.png)
 
 Formulário completo para criação de projetos com:
 - Campos obrigatórios validados
